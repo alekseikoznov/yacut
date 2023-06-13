@@ -1,44 +1,27 @@
-from random import choice
-from string import ascii_letters, digits
-from flask import abort, flash, redirect, render_template
-from re import match
+from flask import flash, redirect, render_template
 from . import app, db
 from .forms import LinkForm
 from .models import URLMap
-
-
-def get_unique_short_id():
-    letters = ascii_letters + digits
-    while True:
-        random_link = ''.join(choice(letters) for i in range(6))
-        if URLMap.query.filter_by(short=random_link).first() is None:
-            break
-    return random_link
-
-
-def correct_short(short):
-    pattern = "^[A-Za-z0-9]*$"
-    return bool(match(pattern, short))
+from .utils import get_unique_short_id, correct_short
 
 
 @app.route('/', methods=['GET', 'POST'])
 def index_view():
     form = LinkForm()
     if form.validate_on_submit():
-        short = form.custom_id.data
-        print(type(form.custom_id.data))
-        if short:
-            if URLMap.query.filter_by(short=short).first():
-                flash(f'Имя {short} уже занято!')
+        custom_id = form.custom_id.data
+        if custom_id:
+            if URLMap.query.filter_by(short=custom_id).first():
+                flash(f'Имя {custom_id} уже занято!')
                 return render_template('main.html', form=form)
-            elif not correct_short(short):
+            elif not correct_short(custom_id):
                 flash('Указано недопустимое имя для короткой ссылки')
                 return render_template('main.html', form=form)
         else:
-            short = get_unique_short_id()
+            custom_id = get_unique_short_id()
         link = URLMap(
             original=form.original_link.data,
-            short=short
+            short=custom_id
         )
         db.session.add(link)
         db.session.commit()
@@ -48,7 +31,5 @@ def index_view():
 
 @app.route('/<path:link>')
 def redirect_view(link):
-    link = URLMap.query.filter_by(short=link).first()
-    if link:
-        return redirect(link.original)
-    abort(404)
+    link = URLMap.query.filter_by(short=link).first_or_404()
+    return redirect(link.original)
